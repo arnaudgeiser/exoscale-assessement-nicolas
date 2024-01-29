@@ -1,0 +1,42 @@
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.11.1" :exoscale.deps/inherit :all}
+        com.github.seancorfield/next.jdbc {:mvn/version "1.3.909"}
+        org.mariadb.jdbc/mariadb-java-client {:mvn/version "3.3.2"}
+        aleph/aleph {:mvn/version "0.7.1"}
+        org.apache.kafka/kafka-clients {:mvn/version "7.0.1-ccs"}
+        cheshire/cheshire {:mvn/version "5.12.0"}
+        org.clj-commons/byte-streams {:mvn/version "0.3.4"}
+        org.clojure/tools.logging {:mvn/version "1.2.4"}
+        ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}
+
+ :exoscale.project/lib exoscale/assessement
+ :exoscale.project/version-file "VERSION"
+
+ :mvn/repos {"confluent" {:url "https://packages.confluent.io/maven/"}}
+
+ :aliases
+ {:project
+  {:ns-default exoscale.tools.project
+   :deps {io.github.exoscale/tools.project
+          {:git/sha "29011d6f6245beeabe95c4b2d3eaa1617937b7e0"}}
+   :exoscale.deps/inherit :all}
+  :test
+  {:extra-deps {lambdaisland/kaocha {:exoscale.deps/inherit :all, :mvn/version "1.66.1034"}}
+   :extra-paths ["test" "test/resources"]
+   :exec-fn  kaocha.runner/exec-fn
+   :exoscale.deps/inherit :all}}
+
+ :exoscale.deps/managed-dependencies
+ {org.clojure/clojure {:mvn/version "1.11.1"}}
+  
+
+ :exoscale.deps/managed-aliases
+ {:project
+  {:ns-default exoscale.tools.project
+   :deps {io.github.exoscale/tools.project
+          {:git/sha "29011d6f6245beeabe95c4b2d3eaa1617937b7e0"}}}
+
+  :test
+  {:extra-deps {lambdaisland/kaocha {:exoscale.deps/inherit :all, :mvn/version "1.66.1034"}}
+   :extra-paths ["test" "test/resources"]
+   :exec-fn  kaocha.runner/exec-fn}}}

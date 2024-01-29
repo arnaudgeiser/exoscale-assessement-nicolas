@@ -1,0 +1,52 @@
+version: '3.1'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:6.1.1
+    ports:
+     - 2181:2181
+     - 2888:2888
+     - 3888:3888
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+  kafka:
+    image: confluentinc/cp-server:6.1.1
+    ports:
+     - 9092:9092
+    links:
+     - zookeeper
+    environment:
+     KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+     KAFKA_BROKER_ID: 1
+     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+     KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+     KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+     KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  mariadb:
+    command: "docker-entrypoint.sh --log-bin --binlog_format=ROW"
+    volumes:
+     - .docker/mariadb-dump:/docker-entrypoint-initdb.d
+    image: mariadb
+    ports:
+      - 3306:3306
+    environment:
+     - MARIADB_ROOT_PASSWORD=debezium
+     - MARIADB_USER=mysqluser
+     - MARIADB_PASSWORD=mysqlpw
+  connect:
+    image: quay.io/debezium/connect:2.4
+    ports:
+     - 8083:8083
+    links:
+     - kafka
+     - mariadb
+    environment:
+     - BOOTSTRAP_SERVERS=kafka:29092
+     - GROUP_ID=1
+     - CONFIG_STORAGE_TOPIC=connect_configs
+     - OFFSET_STORAGE_TOPIC=connect_offsets
+     - STATUS_STORAGE_TOPIC=connect_statuses
