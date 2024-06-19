@@ -4,12 +4,29 @@
             [clojure.tools.logging :as log]
             [next.jdbc             :as jdbc]
             [next.jdbc.sql         :as sql])
-  (:import java.util.Properties
-            org.apache.kafka.clients.consumer.KafkaConsumer))
+  (:import [java.util Properties]
+           [org.apache.kafka.clients.consumer ConsumerConfig KafkaConsumer]))
 
 ;; Kafka configuration
 (def bootstrap-servers "Kafka server" "localhost:9092")
 (def topics            "Kafka topics" ["topic.cloud.instances"])
+
+(def instances-state (atom []))
+
+(defn create-consumer []
+  (let [props (Properties.)]
+    (.put props ConsumerConfig/GROUP_ID_CONFIG "exoscale")
+    (.put props ConsumerConfig/BOOTSTRAP_SERVERS_CONFIG bootstrap-servers)
+    (.put props ConsumerConfig/KEY_DESERIALIZER_CLASS_CONFIG "org.apache.kafka.common.serialization.StringDeserializer")
+    (.put props ConsumerConfig/VALUE_DESERIALIZER_CLASS_CONFIG "org.apache.kafka.common.serialization.StringDeserializer")
+    (KafkaConsumer. props)))
+
+(defn consume-messages [^KafkaConsumer consumer topics]
+  (.subscribe consumer topics)
+  (while true
+    (let [records (.poll consumer 1000)]
+      (doseq [record records]
+        (swap! instances-state conj (json/parse-string (.value record)))))))
 
 ;; MariaDB configuration
 (def mariadb-user     "MariaDB user"     "root")
@@ -66,12 +83,20 @@
   "Starts a process that will calculate the usage based on a Kafka topic sourced
   from Change Data Capture.
   TODO: To be implemented"
-  [])
-  
+  []
+  (future (consume-messages (create-consumer) topics)))
+
+(defn http-handler [req]
+  {:status 200
+   :headers {"content-type" "application/json"}
+   :body @instances-state})
+
 (defn start-server
-  "Starts an HTTP server running on port 12000
-  TODO: To be implemented"
-  [])
+  "Starts an HTTP server running on port 12000"
+  []
+  (http/start-server http-handler {:port 12000}))
+
+
 
 (defn start [& _]
   (log/info "Start simulator")

@@ -10,7 +10,7 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
   kafka:
-    image: confluentinc/cp-server:6.1.1
+    image: confluentinc/cp-server:latest # Changed this before of runtime fatal error in previous image
     ports:
      - 9092:9092
     links:
