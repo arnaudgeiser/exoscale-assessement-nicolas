@@ -1,6 +1,17 @@
 (ns exoscale.assessement-test
-  (:require [clojure.test :refer [deftest is testing]]))
+  (:require [clojure.test :refer [deftest]]
+            [exoscale.assessement :refer [update-state]]))
 
-(deftest a-test
-  (testing "FIXME, I fail."
-    (is (= 0 1))))
+(def instances-state (atom {}))
+
+(deftest test-operation-create
+  (let [event { :payload {
+                         :after {:organization_uuid "org1"
+                                 :instance_uuid "inst1"
+                                 :price_second 15
+                                 :started true}
+                         :op "c"}}]
+    (reset! instances-state {})
+    (update-state event)
+  )
+)

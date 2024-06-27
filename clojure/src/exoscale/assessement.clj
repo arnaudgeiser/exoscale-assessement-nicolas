@@ -3,7 +3,9 @@
             [cheshire.core         :as json]
             [clojure.tools.logging :as log]
             [next.jdbc             :as jdbc]
-            [next.jdbc.sql         :as sql])
+            [next.jdbc.sql         :as sql]
+            [clj-time.core :as t]
+            [clj-time.format :as f])
   (:import [java.util Properties]
            [org.apache.kafka.clients.consumer ConsumerConfig KafkaConsumer]))
 
@@ -11,7 +13,7 @@
 (def bootstrap-servers "Kafka server" "localhost:9092")
 (def topics            "Kafka topics" ["topic.cloud.instances"])
 
-(def instances-state (atom []))
+(def instances-state (atom {}))
 
 (defn create-consumer []
   (let [props (Properties.)]
@@ -20,13 +22,6 @@
     (.put props ConsumerConfig/KEY_DESERIALIZER_CLASS_CONFIG "org.apache.kafka.common.serialization.StringDeserializer")
     (.put props ConsumerConfig/VALUE_DESERIALIZER_CLASS_CONFIG "org.apache.kafka.common.serialization.StringDeserializer")
     (KafkaConsumer. props)))
-
-(defn consume-messages [^KafkaConsumer consumer topics]
-  (.subscribe consumer topics)
-  (while true
-    (let [records (.poll consumer 1000)]
-      (doseq [record records]
-        (swap! instances-state conj (json/parse-string (.value record)))))))
 
 ;; MariaDB configuration
 (def mariadb-user     "MariaDB user"     "root")
@@ -79,23 +74,79 @@
   []
   (future (#'simulator)))
 
+(defn seconds-between
+  "Get the time differences between now and a given timestamp, in seconds"
+  [timestamp-str]
+  (let [formatter (f/formatter "yyyy-MM-dd'T'HH:mm:ssZ")
+        timestamp (f/parse formatter timestamp-str)
+        duration (t/interval timestamp (t/now))]
+    (t/in-seconds duration)))
+
+
+(defn update-state
+  "Update the running machines state, according to the given parsed event message"
+  [event]
+  (let [{:keys [payload]} event
+        {:keys [before after op]} payload]
+    (case op
+      "c"
+      (let [{:keys [organization_uuid instance_uuid price_second started]} after]
+        (swap! instances-state assoc-in [organization_uuid instance_uuid]
+               {:started started
+                :price_second price_second
+                :running true}))
+      "d"
+      (let [{:keys [organization_uuid instance_uuid price_second started]} before
+            billing (* price_second (seconds-between started))
+            current (get-in @instances-state [organization_uuid instance_uuid])]
+        (if current
+          (swap! instances-state assoc-in [organization_uuid instance_uuid]
+                 {:billing billing
+                  :running false}) current))
+      nil)))
+
+
 (defn start-usage-calculator
   "Starts a process that will calculate the usage based on a Kafka topic sourced
-  from Change Data Capture.
-  TODO: To be implemented"
+    from Change Data Capture."
   []
-  (future (consume-messages (create-consumer) topics)))
+  (let [consumer (create-consumer)]
+    (.subscribe consumer topics)
+    (future
+      (while true
+        (let [records (.poll consumer 1000)]
+          (when records
+            (doseq [record records]
+              (let [event (json/parse-string (.value record) true)]
+                (update-state event)))))))))
+
+(defn get-usage-summary
+  "Get the usage summary of each organization's machines"
+  [state]
+  (reduce (fn [acc [org machines]]
+            (let [started (count machines)
+                  running (count (filter (fn [[_ m]] (= (:running m) true)) machines))
+                  billing (reduce (fn [sum [_ m]] (+ sum (:billing m 0))) 0 machines)]
+              (assoc acc org {:started started
+                              :running running
+                              :billing billing})))
+          {}
+          state))
 
 (defn http-handler [req]
-  {:status 200
-   :headers {"content-type" "application/json"}
-   :body @instances-state})
+  (try
+    {:status 200
+     :headers {"content-type" "application/json"}
+     :body (json/generate-string (get-usage-summary @instances-state))}
+    (catch Exception e
+      {:status 500
+       :headers {"content-type" "text/plain"}
+       :body (str "An error occurred: " (.getMessage e))})))
 
 (defn start-server
   "Starts an HTTP server running on port 12000"
   []
   (http/start-server http-handler {:port 12000}))
-
 
 
 (defn start [& _]
